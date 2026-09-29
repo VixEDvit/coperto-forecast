@@ -1,0 +1,7 @@
+{
+  "model": "linear",
+  "mae": 12.06,
+  "mape": 8.19,
+  "baseline_mae": 14.95,
+  "baseline_mape": 10.26
+}

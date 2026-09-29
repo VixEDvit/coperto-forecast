@@ -11,6 +11,7 @@
     python -m src.model
 """
 
+import json
 from pathlib import Path
 
 import joblib
@@ -27,6 +28,8 @@ from src.features import FEATURE_COLUMNS
 
 RANDOM_STATE = 42
 MODEL_PATH = Path("models/model.joblib")
+METRICS_PATH = Path("models/metrics.json")
+FINAL_MODEL = "linear"  # выбрана по backtest, см. notebooks/02_modeling.ipynb
 
 CATEGORICAL = ["dow", "month"]                  # one-hot: у дней недели нет «порядка»
 FLAGS = ["is_weekend", "is_holiday", "is_jan1"]  # уже 0/1, передаём как есть
@@ -92,9 +95,24 @@ def load_model(path: Path = MODEL_PATH):
 if __name__ == "__main__":
     from src.data import prepare
     from src.features import make_features
-    from src.validation import evaluable
+    from src.validation import backtest, evaluable
 
-    rows = evaluable(make_features(prepare("data/raw/guests.csv")))
-    final_model = train("linear", rows)  # выбрана по backtest, см. 02_modeling
-    save_model(final_model)
+    features = make_features(prepare("data/raw/guests.csv"))
+
+    # Качество оцениваем до финального обучения: backtest на 4 периодах по 6 недель
+    scores = backtest(features, [FINAL_MODEL])
+    summary = scores.groupby("model")[["MAE", "MAPE, %"]].mean().round(2)
+    metrics = {
+        "model": FINAL_MODEL,
+        "mae": float(summary.loc[FINAL_MODEL, "MAE"]),
+        "mape": float(summary.loc[FINAL_MODEL, "MAPE, %"]),
+        "baseline_mae": float(summary.loc["baseline", "MAE"]),
+        "baseline_mape": float(summary.loc["baseline", "MAPE, %"]),
+    }
+    print(summary)
+
+    # Финальная модель обучается на всей истории
+    rows = evaluable(features)
+    save_model(train(FINAL_MODEL, rows))
+    METRICS_PATH.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"Модель обучена на {len(rows)} днях и сохранена в {MODEL_PATH}")
