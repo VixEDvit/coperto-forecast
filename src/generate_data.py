@@ -1,5 +1,4 @@
-"""Генерация синтетического датасета посещаемости ресторанов.
-
+""" Генерация данных
 Модель данных (для каждого ресторана):
 
     guests_t ~ Poisson(lambda_t)
@@ -9,10 +8,6 @@
     W(d)  — недельная сезонность, среднее по неделе = 1
     S(t)  — годовая сезонность (летом веранда)
     H(t)  — праздники и сезон корпоративов
-
-После генерации данные намеренно «портятся», как в реальной выгрузке:
-пропущенные дни, дубликаты строк и выбросы (ошибки ввода).
-
 Запуск из корня проекта:
     python -m src.generate_data
 """
@@ -49,7 +44,7 @@ HOLIDAYS = {
 }
 CORPORATE_SEASON_MULTIPLIER = 1.25  # 15–30 декабря, корпоративы
 
-# Параметры ресторанов. Ресторан 2 открылся позже — до открытия данных нет.
+# Параметры ресторанов. Ресторан 2 открылся позже то есть до открытия данных нет.
 RESTAURANTS = [
     {"restaurant_id": 1, "open_date": "2024-10-01", "base_guests": 150,
      "yearly_growth": 0.12, "avg_check": 1500},
@@ -69,7 +64,7 @@ def holiday_multiplier(dates: pd.DatetimeIndex) -> np.ndarray:
 
 def expected_guests(dates: pd.DatetimeIndex, base_guests: float,
                     yearly_growth: float, is_new: bool) -> np.ndarray:
-    """lambda_t = L(t) * W(dow_t) * S(t) * H(t) — ожидаемое число гостей."""
+    """lambda_t = L(t) * W(dow_t) * S(t) * H(t) значит ожидаемое число гостей."""
     t_years = np.arange(len(dates)) / 365.25  # время с открытия, в годах
 
     level = base_guests * (1 + yearly_growth * t_years)  # L(t), линейный тренд
@@ -87,7 +82,7 @@ def expected_guests(dates: pd.DatetimeIndex, base_guests: float,
 
 def simulate_restaurant(params: dict, is_new: bool,
                         rng: np.random.Generator) -> pd.DataFrame:
-    """Чистые (ещё не испорченные) данные одного ресторана."""
+    """Чистые данные одного ресторана."""
     dates = pd.date_range(params["open_date"], END_DATE, freq="D")
     lam = expected_guests(dates, params["base_guests"],
                           params["yearly_growth"], is_new)
@@ -99,7 +94,7 @@ def simulate_restaurant(params: dict, is_new: bool,
     closed = (dates.dayofweek == 0) & (dates.day <= 7)
     guests[closed] = 0
 
-    # Выручка = гости * средний чек; чек немного «гуляет» от дня ко дню
+    # Выручка = гости * средний чек; чек немного гуляет от дня ко дню
     check = params["avg_check"] * rng.lognormal(0, 0.05, size=len(dates))
     revenue = np.round(guests * check, 2)
 
