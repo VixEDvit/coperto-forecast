@@ -1,15 +1,3 @@
-"""Модели: построение, обучение, сохранение и загрузка.
-
-Две модели на одних и тех же признаках:
-    linear   — Ridge-регрессия на log(1 + гости); коэффициенты интерпретируемы
-    boosting — градиентный бустинг над деревьями (HistGradientBoostingRegressor)
-
-Вся предобработка (заполнение пропусков, масштабирование, one-hot) живёт
-внутри Pipeline: она настраивается только на обучающей выборке.
-
-Запуск из корня проекта (обучить финальную модель на всех данных и сохранить):
-    python -m src.model
-"""
 
 import json
 from pathlib import Path
@@ -38,11 +26,6 @@ SPREAD = ["roll_std_28"]
 
 
 def build_linear_model() -> TransformedTargetRegressor:
-    """Ridge на log(1 + y) с логарифмами лагов.
-
-    Ряд мультипликативный: y = L * W * S * H. После логарифма
-    log y = log L + log W + log S + log H — сумма, и линейная модель подходит точно.
-    """
     preprocess = ColumnTransformer([
         ("categories", OneHotEncoder(drop="first", handle_unknown="ignore"), CATEGORICAL),
         ("flags", "passthrough", FLAGS),
@@ -56,7 +39,6 @@ def build_linear_model() -> TransformedTargetRegressor:
 
 
 def build_boosting_model() -> HistGradientBoostingRegressor:
-    """Градиентный бустинг: сам обрабатывает NaN и находит взаимодействия признаков."""
     return HistGradientBoostingRegressor(
         loss="absolute_error",      # оптимизируем то же, что меряем, — MAE
         max_iter=300,

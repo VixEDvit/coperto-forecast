@@ -1,15 +1,8 @@
-"""Загрузка и очистка сырых данных о посещаемости.
+"""Загрузка и очистка данных.
 
-Пайплайн (функция prepare):
-    1. load_raw          — чтение CSV, проверка схемы, удаление дубликатов
-    2. restore_calendar  — каждый день от открытия до конца данных есть в таблице
-    3. mark_closed       — закрытые дни (0 гостей) помечаются флагом
-    4. mark_outliers     — выбросы (ошибки ввода) помечаются и убираются из целевой
-
-Три вида «пустых» дней обрабатываются по-разному:
-    - ресторан закрыт       -> строка есть, guests = 0,   is_closed = 1
-    - сбой выгрузки         -> строка восстановлена, guests = NaN, is_missing = 1
-    - точки ещё не было     -> строк нет: календарь начинается с первого дня данных
+Пустые дни бывают трёх видов, и они обрабатываются по-разному
+закрыто (0 гостей, is_closed), сбой выгрузки (NaN, is_missing),
+ресторан ещё не открылся (строк нет).
 """
 
 from pathlib import Path
@@ -24,11 +17,8 @@ RAW_SCHEMA = {
     "revenue": "float64",      # выручка за день, ₽
 }
 
-# Выброс: день, где гостей в OUTLIER_RATIO раз больше (или меньше), чем
-# обычно в этот день недели. Самые сильные праздники (31 декабря, 8 марта)
-# дают ~1.8x, поэтому порог 2.5 их не задевает.
 OUTLIER_RATIO = 2.5
-SAME_DOW_WINDOW = 5  # сколько соседних одноимённых дней недели берём для «нормы»
+SAME_DOW_WINDOW = 5  # сколько соседних одноимённых дней недели берём
 
 
 def load_raw(path: str | Path) -> pd.DataFrame:
@@ -46,10 +36,10 @@ def load_raw(path: str | Path) -> pd.DataFrame:
 
     df = df[list(RAW_SCHEMA)].astype(RAW_SCHEMA)
 
-    # Одна и та же строка, выгруженная дважды, — дубликат, оставляем одну.
+    # Одна и та же строка, выгруженная дважды дубликат, оставляем одну.
     df = df.drop_duplicates()
 
-    # Два РАЗНЫХ значения за один день и ресторан — противоречие в данных.
+    # Два РАЗНЫХ значения за один день и ресторан это противоречие в данных.
     conflicts = df.duplicated(subset=["restaurant_id", "date"], keep=False)
     if conflicts.any():
         raise ValueError(
@@ -59,11 +49,6 @@ def load_raw(path: str | Path) -> pd.DataFrame:
 
 
 def restore_calendar(df: pd.DataFrame) -> pd.DataFrame:
-    """Восстанавливает пропущенные дни внутри периода работы каждой точки.
-
-    Календарь строится от первой до последней даты КАЖДОГО ресторана,
-    поэтому дни до открытия точки не появляются (точки ещё не было).
-    """
     bounds = df.groupby("restaurant_id")["date"].agg(["min", "max"])
 
     calendar = pd.concat([
@@ -81,21 +66,12 @@ def restore_calendar(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def mark_closed(df: pd.DataFrame) -> pd.DataFrame:
-    """Помечает дни, когда ресторан был закрыт (гостей ровно 0)."""
     out = df.copy()
     out["is_closed"] = (out["guests"] == 0).astype(int)
     return out
 
 
 def mark_outliers(df: pd.DataFrame) -> pd.DataFrame:
-    """Находит выбросы и убирает их из целевой (guests, revenue -> NaN).
-
-    «Норма» дня — медиана того же дня недели в соседних неделях
-    (по SAME_DOW_WINDOW значений, окно по центру). Используем и прошлые,
-    и будущие недели: это очистка ИСТОРИИ, а не признак для прогноза,
-    поэтому утечкой это не является. Исходные значения сохраняются
-    в guests_raw — для EDA и объяснения, что было удалено.
-    """
     out = df.copy()
     out["guests_raw"] = out["guests"]
 
@@ -115,7 +91,6 @@ def mark_outliers(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare(path: str | Path) -> pd.DataFrame:
-    """Полный пайплайн: сырой CSV -> чистая таблица с флагами."""
     df = load_raw(path)
     df = restore_calendar(df)
     df = mark_closed(df)

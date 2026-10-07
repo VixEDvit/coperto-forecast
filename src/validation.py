@@ -1,8 +1,6 @@
-"""Разбиение по времени, метрики и бейзлайн.
-
-Все признаки сдвинуты минимум на 7 дней (см. src.features), поэтому прогноз
-на любой день отложенного периода — это честный прогноз «на 7 дней вперёд»:
-он использует только данные, известные за неделю до этого дня.
+"""
+Все признаки сдвинуты минимум на 7 дней, поэтому прогноз
+на любой день отложенного периода использует только данные, известные за неделю до этого дня.
 """
 
 import numpy as np
@@ -12,7 +10,7 @@ from src.features import FEATURE_COLUMNS
 
 
 def time_split(df: pd.DataFrame, valid_weeks: int = 6) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Последние valid_weeks недель — валидация, всё, что раньше, — обучение."""
+    """Последние valid_weeks недель валидация, всё что раньше обучение."""
     cutoff = df["date"].max() - pd.Timedelta(weeks=valid_weeks)
     train = df[df["date"] <= cutoff]
     valid = df[df["date"] > cutoff]
@@ -22,22 +20,17 @@ def time_split(df: pd.DataFrame, valid_weeks: int = 6) -> tuple[pd.DataFrame, pd
 
 
 def evaluable(df: pd.DataFrame, target: str = "guests") -> pd.DataFrame:
-    """Строки, на которых можно учить и оценивать модель.
-
-    Исключаем закрытые дни (прогноз = 0 по графику, модель не нужна),
-    а также сбои выгрузки и выбросы (целевая неизвестна или ненадёжна).
-    """
     mask = (df["is_closed"] == 0) & df[target].notna()
     return df[mask]
 
 
 def mae(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Средняя абсолютная ошибка, в гостях."""
+    """Средняя абсолютная ошибка в гостях."""
     return float(np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred))))
 
 
 def mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Средняя абсолютная процентная ошибка по дням с y > 0, в процентах."""
+    """Средняя абсолютная процентная ошибка по дням с y > 0"""
     y_true, y_pred = np.asarray(y_true, dtype=float), np.asarray(y_pred, dtype=float)
     mask = y_true > 0
     if not mask.any():
@@ -46,18 +39,13 @@ def mape(y_true: np.ndarray, y_pred: np.ndarray) -> float:
 
 
 def baseline_predict(features: pd.DataFrame) -> pd.Series:
-    """Наивный прогноз: столько же, сколько в тот же день неделю назад.
-
-    Если неделю назад данных нет (закрыто, сбой), берём две недели назад,
-    а если и их нет — средний уровень за 4 недели.
-    """
     return (features["lag_7"]
             .fillna(features["lag_14"])
             .fillna(features["roll_mean_28"]))
 
 
 def compare(y_true: pd.Series, predictions: dict[str, np.ndarray]) -> pd.DataFrame:
-    """Таблица MAE и MAPE для нескольких моделей на одних и тех же днях."""
+    """Таблица MAE и MAPE для нескольких моделей"""
     rows = [{"model": name, "MAE": mae(y_true, pred), "MAPE, %": mape(y_true, pred)}
             for name, pred in predictions.items()]
     return pd.DataFrame(rows).set_index("model").round(2)
@@ -65,13 +53,7 @@ def compare(y_true: pd.Series, predictions: dict[str, np.ndarray]) -> pd.DataFra
 
 def backtest(features: pd.DataFrame, model_names: list[str],
              n_folds: int = 4, fold_weeks: int = 6) -> pd.DataFrame:
-    """Проверка на нескольких отложенных периодах подряд (expanding window).
-
-    Фолд k: обучение на всём до даты cutoff_k, проверка на следующих fold_weeks
-    неделях. Одно отложенное окно — это всего ~80 дней, и метрика на нём шумная;
-    несколько окон показывают, устойчиво ли одна модель лучше другой.
-    """
-    from src.model import train  # импорт здесь, чтобы модули не зависели друг от друга по кругу
+    from src.model import train  # импорт тут чтобы модули не зависели друг от друга по кругу
 
     end = features["date"].max()
     rows = []

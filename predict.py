@@ -1,13 +1,3 @@
-"""Прогноз числа гостей на 7 дней вперёд.
-
-Пример:
-    python predict.py --date 2026-10-01 --restaurant 1
-    python predict.py --date 2026-10-01 --restaurant 2 --output forecast.csv
-
---date — первый день прогноза. Используется только история ДО этой даты,
-признаки считаются той же функцией, что и при обучении (src.features.make_features),
-модель загружается из файла, а не обучается заново.
-"""
 
 import argparse
 import json
@@ -26,11 +16,6 @@ MIN_HISTORY_DAYS = ROLLING_WINDOW + HORIZON  # чтобы посчитать у�
 
 
 def scheduled_closed(dates: pd.Series) -> pd.Series:
-    """График работы: санитарный день — первый понедельник месяца.
-
-    График известен заранее (как и календарь праздников), поэтому его можно
-    использовать для будущих дат. В реальной системе он приходил бы от ресторана.
-    """
     return ((dates.dt.dayofweek == 0) & (dates.dt.day <= 7)).astype(int)
 
 
